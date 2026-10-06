@@ -53,7 +53,7 @@ run_models <- function(prep, vars, adjust, progress = function(n, label) NULL) {
         anova_result <- stats::anova(MM_Form, type = "II", ddf = "Kenward-Roger")
         em <- emmeans(MM_Form, specs = "Tx", lmer.df = "kenward-roger")
         means <- as.data.frame(summary(em))
-        pw <- as.data.frame(summary(pairs(em, adjust = adjust)))
+        pw <- as.data.frame(summary(pairs(em, adjust = adjust), infer = TRUE))
         list(MM_Form = MM_Form, anova = anova_result, means = means, pairs = pw)
       }, error = function(e) {
         stop("Model failed for '", label, "': ", conditionMessage(e), call. = FALSE)
@@ -132,7 +132,9 @@ plot_stats <- function(datos, res, opt) {
   means <- res$means
   ref <- if (isTRUE(opt$ref %in% lev)) opt$ref else lev[1]  # plotted first
   ref_mean <- means$emmean[as.character(means$Tx) == ref]
-  scale <- if (opt$scale == "ratio" && ref_mean == 0) "raw" else opt$scale
+  # Ratios need positive values; otherwise direction can flip (e.g. negative dCt)
+  ratio_ok <- ref_mean > 0 && all(datos[[res$var]] > 0, na.rm = TRUE)
+  scale <- if (opt$scale == "ratio" && !ratio_ok) "raw" else opt$scale
   # Display scale; stats stay on entered values
   tf <- switch(scale, raw = identity,
                ratio = function(v) v / ref_mean,
@@ -154,6 +156,13 @@ plot_stats <- function(datos, res, opt) {
   if (opt$dir == "up") lo <- m
   list(ref = ref, ord = c(ref, setdiff(lev, ref)), scale = scale, y = y,
        g = g, m = m, lo = lo, hi = hi)
+}
+
+scale_note <- function(opt, scale) {
+  if (opt$scale == "ratio" && scale == "raw") {
+    mtext("Relative scale needs positive values; showing values as entered (use fold change for ΔCt)",
+          side = 1, line = par("mar")[1] - 1, adj = 0, cex = 0.6 * par("cex"))
+  }
 }
 
 scale_label <- function(st, raw, opt) {
@@ -272,6 +281,7 @@ draw_plot <- function(datos, res, adjust, opt = plot_defaults) {
     text((a + b) / 2, yb, sig_label(pw$p.value[i], opt), pos = 3, cex = 0.8, offset = 0.2)
   }
   star_key(opt)
+  scale_note(opt, scale)
 
   usr <- par("usr")
   lx <- usr[2] + 0.02 * diff(usr[1:2])
@@ -294,6 +304,9 @@ draw_multi <- function(datos, results, adjust, opt = plot_defaults) {
   opt <- modifyList(plot_defaults, Filter(Negate(is.null), opt))
   n <- length(results)
   sts <- lapply(results, function(r) plot_stats(datos, r, opt))
+  # Shared axis: if any parameter can't use the relative scale, none do
+  if (opt$scale == "ratio" && any(vapply(sts, function(s) s$scale == "raw", TRUE)))
+    sts <- lapply(results, function(r) plot_stats(datos, r, modifyList(opt, list(scale = "raw"))))
   ord <- sts[[1]]$ord
   k <- length(ord)
   w <- 0.8 / k
@@ -364,6 +377,7 @@ draw_multi <- function(datos, results, adjust, opt = plot_defaults) {
     }
   }
   star_key(opt)
+  scale_note(opt, sts[[1]]$scale)
 
   usr <- par("usr")
   lx <- usr[2] + 0.02 * diff(usr[1:2])
@@ -422,6 +436,8 @@ ui <- page_sidebar(
     ),
     nav_panel("ANOVA output", verbatimTextOutput("anova_print")),
     nav_panel("Pairwise",
+      helpText("Fold-change columns (2^-estimate) appear when the plot Y axis is set",
+               "to fold change (ΔCt data)."),
       tableOutput("pairs_table"),
       actionButton("dl_pairs", "Download pairwise (.csv)", icon = icon("download"))
     ),
@@ -460,6 +476,7 @@ ui <- page_sidebar(
             "Values as entered" = "raw",
             "Relative to reference (linear data)" = "ratio",
             "Fold change 2^-ΔΔCt (ΔCt data)" = "fc")),
+          helpText("Relative: for positive measurements (e.g. amplitude). For ΔCt, use fold change."),
           textInput("ylab", "Y-axis label (optional)", placeholder = "Name (units)"),
           selectInput("rot", "X label angle", choices = c(
             "Auto" = "auto", "Horizontal" = "0", "45°" = "45", "Vertical" = "90"))),
@@ -595,6 +612,15 @@ server <- function(input, output, session) {
     df$contrast <- paste(a, "-", b)
     df$estimate <- ifelse(flip, -df$estimate, df$estimate)
     df$t.ratio <- ifelse(flip, -df$t.ratio, df$t.ratio)
+    lo <- df$lower.CL
+    df$lower.CL <- ifelse(flip, -df$upper.CL, lo)
+    df$upper.CL <- ifelse(flip, -lo, df$upper.CL)
+    # dCt data: fold change of the first group vs the second (2^-estimate)
+    if (identical(input$scale, "fc")) {
+      df$Fold_change <- 2^-df$estimate
+      df$FC_lower <- 2^-df$upper.CL
+      df$FC_upper <- 2^-df$lower.CL
+    }
     df
   })
 
