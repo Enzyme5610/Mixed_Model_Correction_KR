@@ -1,5 +1,11 @@
 # Mixed Model Correction
 
+> **Retired.** This version is no longer maintained. Please use
+> **[Mixed_Model_Correction](https://github.com/Enzyme5610/Mixed_Model_Correction)**
+> (app: https://enzyme5610.github.io/Mixed_Model_Correction/). It gives the same
+> results with default settings, plus new options. The link below now redirects
+> there; the code here is kept for reference.
+
 Browser-based tool for testing treatment effects on physiology or qPCR data
 with a linear mixed model, accounting for Line and Batch variability.
 Includes pairwise comparisons and downloadable plots. No installation needed.
