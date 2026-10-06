@@ -425,11 +425,12 @@ ui <- page_sidebar(
       tableOutput("pairs_table"),
       actionButton("dl_pairs", "Download pairwise (.csv)", icon = icon("download"))
     ),
-    nav_panel("Plots", div(  # plain div: no fill layout
-      layout_columns(
-        col_widths = c(4, 4, 4),
-        div(
-          radioButtons("fig", "Figure", choices = c(
+    nav_panel("Plots", layout_sidebar(
+      fillable = FALSE,
+      sidebar = sidebar(width = 290, accordion(
+        open = "Figure",
+        accordion_panel("Figure",
+          radioButtons("fig", NULL, choices = c(
             "One parameter" = "one", "All parameters in one figure" = "all")),
           conditionalPanel("input.fig == 'one'",
             selectInput("plot_param", "Parameter", choices = NULL)),
@@ -442,8 +443,9 @@ ui <- page_sidebar(
             radioButtons("layout", "Means", inline = TRUE,
                          choices = c("Beside dots" = "side", "Over dots" = "overlay"))),
           conditionalPanel("input.type != 'dots'",
-            checkboxInput("dots", "Show dots", TRUE)),
-          selectInput("err", "Error bars", choices = c(
+            checkboxInput("dots", "Show dots", TRUE))),
+        accordion_panel("Error bars",
+          selectInput("err", NULL, choices = c(
             "95% CI (model)" = "ci", "SE (model)" = "se", "SEM" = "sem", "SD" = "sd")),
           conditionalPanel("input.err == 'sem' || input.err == 'sd'",
             helpText("SEM and SD use the raw values and ignore Line and Batch.")),
@@ -452,30 +454,27 @@ ui <- page_sidebar(
           checkboxInput("caps", "Caps", TRUE),
           conditionalPanel("input.type != 'bar'",
             radioButtons("center", "Mean marker", inline = TRUE,
-                         choices = c("Diamond" = "diamond", "Line" = "line")))
-        ),
-        div(
+                         choices = c("Diamond" = "diamond", "Line" = "line")))),
+        accordion_panel("Axis & labels",
           selectInput("scale", "Y axis", choices = c(
             "Values as entered" = "raw",
             "Relative to reference (linear data)" = "ratio",
             "Fold change 2^-ΔΔCt (ΔCt data)" = "fc")),
           textInput("ylab", "Y-axis label (optional)", placeholder = "Name (units)"),
-          selectInput("rot", "Label angle", choices = c(
-            "Auto" = "auto", "Horizontal" = "0", "45°" = "45", "Vertical" = "90")),
+          selectInput("rot", "X label angle", choices = c(
+            "Auto" = "auto", "Horizontal" = "0", "45°" = "45", "Vertical" = "90"))),
+        accordion_panel("Colors & significance",
           selectInput("color_by", "Color dots by", choices = c(
             "Line" = "line", "Batch" = "batch", "None" = "none")),
-          checkboxInput("brackets", "Show significance", TRUE),
-          radioButtons("labels", NULL, inline = TRUE,
-                       choices = c("p-values" = "p", "Stars (*, ns)" = "stars"))
-        ),
-        div(
           sliderInput("pt_size", "Dot size", min = 0.4, max = 2, value = 1, step = 0.1),
+          radioButtons("sig", "Significance", inline = TRUE,
+                       choices = c("p-values" = "p", "Stars" = "stars", "Hide" = "none"))),
+        accordion_panel("Size",
           numericInput("w", "Width (in)", value = 5, min = 3, max = 12, step = 0.5),
           checkboxInput("square", "Square", TRUE),
           conditionalPanel("!input.square",
-            numericInput("h", "Height (in)", value = 5, min = 3, max = 12, step = 0.5))
-        )
-      ),
+            numericInput("h", "Height (in)", value = 5, min = 3, max = 12, step = 0.5)))
+      )),
       plotOutput("plot", width = "auto", height = "auto", fill = FALSE),
       div(
         actionButton("dl_png", "PNG (this figure)", icon = icon("download")),
@@ -629,8 +628,8 @@ server <- function(input, output, session) {
   })
 
   opt <- reactive(list(type = input$type, layout = input$layout, dots = input$dots,
-                       color_by = input$color_by, labels = input$labels, size = input$pt_size,
-                       brackets = input$brackets, scale = input$scale, ref = input$ref,
+                       color_by = input$color_by, labels = input$sig, size = input$pt_size,
+                       brackets = !identical(input$sig, "none"), scale = input$scale, ref = input$ref,
                        ylab = input$ylab, err = input$err, dir = input$dir,
                        caps = input$caps, center = input$center, rot = input$rot))
 
